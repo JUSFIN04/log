@@ -1,22 +1,18 @@
 import { Stack } from "expo-router";
+import { StyleSheet } from "react-native";
+
+const styles = StyleSheet.create({
+  link: {
+    color: "blue",
+    textDecorationLine: "underline",
+  },
+});
 
 export default function AuthLayout() {
   return (
-    <Stack>
-      <Stack.Screen
-        name="login"
-        options={{
-          title: "Login",
-          headerShown: false,
-        }}
-      />
-      <Stack.Screen
-        name="signup"
-        options={{
-          title: "Sign Up",
-          headerShown: false,
-        }}
-      />
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="login" />
+      <Stack.Screen name="signup" />
     </Stack>
   );
 }
