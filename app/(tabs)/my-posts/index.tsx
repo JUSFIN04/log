@@ -2,18 +2,21 @@ import { useAuth } from "@/context/auth";
 import { usePocketBase } from "@/context/pocketbase";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Dimensions,
   FlatList,
   Image,
+  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { Calendar, DateData } from "react-native-calendars";
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get("window");
 
@@ -47,6 +50,13 @@ export default function PostsScreen() {
   const { pb } = usePocketBase();
   const { user } = useAuth();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+
+  const [selectedDate, setSelectedDate] = useState<string>(
+    new Date().toISOString().split('T')[0]
+  );
+  const [calendarViewMode, setCalendarViewMode] = useState<'calendar' | 'timeline'>('calendar');
+  const [markedDates, setMarkedDates] = useState<Record<string, any>>({});
 
   const fetchData = React.useCallback(async () => {
     setIsLoading(true);
@@ -54,13 +64,14 @@ export default function PostsScreen() {
     try {
       if (!pb || !user) return;
 
-      if (activeTab === "posts") {
+      if (activeTab === "posts" || activeTab === "Calender") {
         const records = await pb.collection("Post").getList(1, 50, {
           filter: `Creator ~ '${user.id}'`,
           sort: "-created",
           expand: "Tags",
         });
 
+        // Set posts (used by both Posts and Calendar tabs)
         setPosts(
           records.items.map((item: any) => ({
             id: item.id,
@@ -69,14 +80,12 @@ export default function PostsScreen() {
             post_type: item.Post_Type,
             created: item.created,
             rating: item.Rating?.[0] || "0",
-            poster: item.Poster, // Make sure to include the poster/image field
+            poster: item.Poster,
             media: item.Media,
-            // Assign a random view type for demo purposes
-            // In production, you'd store this preference or let users set it per post
             viewType: item.View_Type || viewType,
           }))
         );
-      } else {
+      } else if (activeTab === "collections") {
         const records = await pb.collection("Post_Collection").getList(1, 50, {
           filter: `Creator ~ '${user.id}'`, // Using ~ for array contains
           sort: "-created",
@@ -150,7 +159,7 @@ export default function PostsScreen() {
   const renderBannerView = (item: Post) => (
     <TouchableOpacity
       style={styles.bannerContainer}
-      onPress={() => router.push(`/my-posts/${item.id}`)}
+      onPress={() => router.push(`./${item.id}`)}
     >
       <View style={styles.bannerImageContainer}>
         <Image
@@ -288,118 +297,323 @@ export default function PostsScreen() {
     fetchData();
   };
 
+  // Add this function to your component
+  const generateMarkedDates = useCallback(() => {
+    const marked: Record<string, any> = {};
+    
+    // Mark dates that have posts
+    posts.forEach(post => {
+      const date = post.created.split('T')[0];
+      if (date) {
+        marked[date] = {
+          ...(marked[date] || {}),
+          marked: true,
+          dotColor: '#007AFF'
+        };
+      }
+    });
+    
+    // Highlight selected date
+    if (selectedDate) {
+      marked[selectedDate] = {
+        ...(marked[selectedDate] || {}),
+        selected: true,
+        selectedColor: '#007AFF',
+        // Keep dot if there are posts on this date
+        ...(marked[selectedDate]?.marked ? { marked: true, dotColor: 'white' } : {})
+      };
+    }
+    
+    setMarkedDates(marked);
+  }, [posts, selectedDate]);
+
+  // Add this function to get posts for a selected date
+  const getPostsForDate = useCallback((date: string) => {
+    return posts.filter(post => {
+      const postDate = post.created.split('T')[0];
+      return postDate === date;
+    });
+  }, [posts]);
+
+  // Add this useEffect to update marked dates
+  useEffect(() => {
+    if (activeTab === 'Calender') {
+      generateMarkedDates();
+    }
+  }, [generateMarkedDates, activeTab, posts, selectedDate]);
+
   return (
-    <View style={styles.container}>
-      <View style={styles.tabsContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "posts" && styles.activeTab]}
-          onPress={() => handleTabChange("posts")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "posts" && styles.activeTabText,
-            ]}
-          >
-            Posts
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "collections" && styles.activeTab]}
-          onPress={() => handleTabChange("collections")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "collections" && styles.activeTabText,
-            ]}
-          >
-            Collections
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
-        </View>
-      ) : (
-        <>
-          {activeTab === "posts" && (
-            <View style={styles.viewTypeContainer}>
-              <TouchableOpacity
-                style={styles.viewTypeButton}
-                onPress={cycleViewType}
-              >
-                <Ionicons
-                  name={
-                    viewType === "banner"
-                      ? "reorder-four-outline"
-                      : viewType === "photo"
-                      ? "grid-outline"
-                      : "list-outline"
-                  }
-                  size={24}
-                  color="#007AFF"
-                />
-                <Text style={styles.viewTypeText}>
-                  {viewType === "banner"
-                    ? "Banner View"
-                    : viewType === "photo"
-                    ? "Photo Cards"
-                    : "Post Cards"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {activeTab === "posts" ? (
-            <FlatList
-              data={posts}
-              keyExtractor={(item) => item.id}
-              renderItem={renderPostItem}
-              contentContainerStyle={styles.listContent}
-              numColumns={viewType === 'photo' ? 2 : 1}
-              key={viewType} // Force re-render on view type change
-              ListEmptyComponent={() => (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No posts found</Text>
-                </View>
-              )}
-            />
-          ) : (
-            <FlatList
-              data={collections}
-              keyExtractor={(item) => item.id}
-              renderItem={renderCollectionItem}
-              contentContainerStyle={styles.listContent}
-              ListEmptyComponent={() => (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No collections found</Text>
-                </View>
-              )}
-            />
-          )}
-
+    <SafeAreaView style={styles.safeArea}>
+      <View style={[styles.container, { paddingTop: insets.top > 0 ? 0 : 12 }]}>
+        <View style={styles.tabsContainer}>
           <TouchableOpacity
-            style={styles.fab}
-            onPress={() =>
-              router.push(
-                activeTab === "posts"
-                  ? "./posts/create"
-                  : "./posts/collections/create"
-              )
-            }
+            style={[styles.tab, activeTab === "posts" && styles.activeTab]}
+            onPress={() => handleTabChange("posts")}
           >
-            <Ionicons name="add" size={24} color="white" />
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "posts" && styles.activeTabText,
+              ]}
+            >
+              Posts
+            </Text>
           </TouchableOpacity>
-        </>
-      )}
-    </View>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === "collections" && styles.activeTab]}
+            onPress={() => handleTabChange("collections")}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "collections" && styles.activeTabText,
+              ]}
+            >
+              Collections
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === "Calender" && styles.activeTab]}
+            onPress={() => handleTabChange("Calender")}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "colleCalenderctions" && styles.activeTabText,
+              ]}
+            >
+              Calender
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#007AFF" />
+          </View>
+        ) : (
+          <>
+            {activeTab === "posts" && (
+              <View style={styles.viewTypeContainer}>
+                <TouchableOpacity
+                  style={styles.viewTypeButton}
+                  onPress={cycleViewType}
+                >
+                  <Ionicons
+                    name={
+                      viewType === "banner"
+                        ? "reorder-four-outline"
+                        : viewType === "photo"
+                        ? "grid-outline"
+                        : "list-outline"
+                    }
+                    size={24}
+                    color="#007AFF"
+                  />
+                  <Text style={styles.viewTypeText}>
+                    {viewType === "banner"
+                      ? "Banner View"
+                      : viewType === "photo"
+                      ? "Photo Cards"
+                      : "Post Cards"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {activeTab === "posts" ? (
+              <FlatList
+                data={posts}
+                keyExtractor={(item) => item.id}
+                renderItem={renderPostItem}
+                contentContainerStyle={styles.listContent}
+                numColumns={viewType === 'photo' ? 2 : 1}
+                key={viewType} // Force re-render on view type change
+                ListEmptyComponent={() => (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>No posts found</Text>
+                  </View>
+                )}
+              />
+            ) : activeTab === "collections" ? (
+              <FlatList
+                data={collections}
+                keyExtractor={(item) => item.id}
+                renderItem={renderCollectionItem}
+                contentContainerStyle={styles.listContent}
+                ListEmptyComponent={() => (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>No collections found</Text>
+                  </View>
+                )}
+              />
+            ) : (
+              /* Calendar and Timeline View */
+              <View style={styles.calendarContainer}>
+                {/* View Toggle Buttons */}
+                <View style={styles.calendarViewToggle}>
+                  <TouchableOpacity 
+                    style={[
+                      styles.calendarToggleButton, 
+                      calendarViewMode === 'calendar' && styles.activeCalendarToggleButton
+                    ]}
+                    onPress={() => setCalendarViewMode('calendar')}
+                  >
+                    <Ionicons 
+                      name="calendar" 
+                      size={18} 
+                      color={calendarViewMode === 'calendar' ? '#007AFF' : '#8E8E93'} 
+                    />
+                    <Text 
+                      style={[
+                        styles.calendarToggleText,
+                        calendarViewMode === 'calendar' && styles.activeCalendarToggleText
+                      ]}
+                    >
+                      Calendar
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[
+                      styles.calendarToggleButton, 
+                      calendarViewMode === 'timeline' && styles.activeCalendarToggleButton
+                    ]}
+                    onPress={() => setCalendarViewMode('timeline')}
+                  >
+                    <Ionicons 
+                      name="time-outline" 
+                      size={18} 
+                      color={calendarViewMode === 'timeline' ? '#007AFF' : '#8E8E93'} 
+                    />
+                    <Text 
+                      style={[
+                        styles.calendarToggleText,
+                        calendarViewMode === 'timeline' && styles.activeCalendarToggleText
+                      ]}
+                    >
+                      Timeline
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {/* Calendar View */}
+                {calendarViewMode === 'calendar' ? (
+                  <View style={styles.calendarWrapper}>
+                    <Calendar
+                      current={selectedDate}
+                      onDayPress={(day: DateData) => setSelectedDate(day.dateString)}
+                      markedDates={markedDates}
+                      theme={{
+                        backgroundColor: '#ffffff',
+                        calendarBackground: '#ffffff',
+                        textSectionTitleColor: '#b6c1cd',
+                        selectedDayBackgroundColor: '#007AFF',
+                        selectedDayTextColor: '#ffffff',
+                        todayTextColor: '#007AFF',
+                        dayTextColor: '#2d4150',
+                        textDisabledColor: '#d9e1e8',
+                        dotColor: '#007AFF',
+                        selectedDotColor: '#ffffff',
+                        arrowColor: '#007AFF',
+                        monthTextColor: '#2d4150',
+                        indicatorColor: '#007AFF',
+                        textDayFontWeight: '300',
+                        textMonthFontWeight: 'bold',
+                        textDayHeaderFontWeight: '300'
+                      }}
+                    />
+                    
+                    {/* Posts for selected date */}
+                    <View style={styles.selectedDateContainer}>
+                      <Text style={styles.selectedDateTitle}>
+                        Posts for {new Date(selectedDate).toLocaleDateString()}
+                      </Text>
+                      <FlatList
+                        data={getPostsForDate(selectedDate)}
+                        keyExtractor={(item) => item.id}
+                        renderItem={renderPostItem}
+                        contentContainerStyle={styles.calendarListContent}
+                        ListEmptyComponent={() => (
+                          <View style={styles.emptyContainer}>
+                            <Text style={styles.emptyText}>No posts for this date</Text>
+                          </View>
+                        )}
+                      />
+                    </View>
+                  </View>
+                ) : (
+                  /* Timeline View */
+                  <FlatList
+                    data={posts.sort((a, b) => new Date(b.created).getTime() - new Date(a.created).getTime())}
+                    keyExtractor={(item) => item.id}
+                    renderItem={({ item }) => (
+                      <View style={styles.timelineItem}>
+                        <View style={styles.timelineLeft}>
+                          <View style={styles.timelineDot} />
+                          <View style={styles.timelineLine} />
+                        </View>
+                        <View style={styles.timelineContent}>
+                          <Text style={styles.timelineDate}>
+                            {new Date(item.created).toLocaleDateString()}
+                          </Text>
+                          <Text style={styles.timelineTime}>
+                            {new Date(item.created).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </Text>
+                          <TouchableOpacity
+                            style={styles.timelineCard}
+                            onPress={() => router.push(`/my-posts/${item.id}`)}
+                          >
+                            <Text style={styles.timelineCardTitle}>{item.title}</Text>
+                            {item.text && (
+                              <Text style={styles.timelineCardText} numberOfLines={2}>
+                                {item.text}
+                              </Text>
+                            )}
+                            {item.post_type && (
+                              <View style={styles.timelineTagContainer}>
+                                <Text style={styles.timelineTagText}>{item.post_type}</Text>
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    )}
+                    contentContainerStyle={styles.timelineContainer}
+                    ListEmptyComponent={() => (
+                      <View style={styles.emptyContainer}>
+                        <Text style={styles.emptyText}>No posts found</Text>
+                      </View>
+                    )}
+                  />
+                )}
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={styles.fab}
+              onPress={() =>
+                router.push(
+                  activeTab === "posts"
+                    ? "./posts/create"
+                    : "./posts/collections/create"
+                )
+              }
+            >
+              <Ionicons name="add" size={24} color="white" />
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "white", // Match your tabs background
+  },
   container: {
     flex: 1,
     backgroundColor: "#F9F9FB",
@@ -666,5 +880,135 @@ const styles = StyleSheet.create({
   photoItemWrapper: {
     width: width / 2 - 24, // Half width minus padding
     margin: 8,
+  },
+
+  // Calendar and Timeline styles
+  calendarContainer: {
+    flex: 1,
+    backgroundColor: "white",
+    borderRadius: 8,
+    marginBottom: 16,
+    overflow: "hidden",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  calendarViewToggle: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    padding: 12,
+    backgroundColor: "#F7F7FB",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E1E1E1",
+  },
+  calendarToggleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 8,
+  },
+  activeCalendarToggleButton: {
+    backgroundColor: "#E1F5FE",
+    borderRadius: 8,
+  },
+  calendarToggleText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: "#007AFF",
+  },
+  activeCalendarToggleText: {
+    fontWeight: "600",
+    color: "#007AFF",
+  },
+  calendarWrapper: {
+    flex: 1,
+    padding: 16,
+  },
+  selectedDateContainer: {
+    marginTop: 16,
+  },
+  selectedDateTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  calendarListContent: {
+    paddingBottom: 80,
+  },
+  timelineContainer: {
+    paddingBottom: 80,
+  },
+  timelineItem: {
+    flexDirection: "row",
+    marginBottom: 16,
+  },
+  timelineLeft: {
+    alignItems: "center",
+    marginRight: 12,
+  },
+  timelineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#007AFF",
+    marginBottom: 4,
+  },
+  timelineLine: {
+    width: 2,
+    flex: 1,
+    backgroundColor: "#007AFF",
+    marginBottom: 4,
+  },
+  timelineContent: {
+    flex: 1,
+    backgroundColor: "white",
+    borderRadius: 8,
+    padding: 12,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  timelineDate: {
+    fontSize: 12,
+    color: "#8E8E93",
+    marginBottom: 4,
+  },
+  timelineTime: {
+    fontSize: 12,
+    color: "#8E8E93",
+    marginBottom: 8,
+  },
+  timelineCard: {
+    backgroundColor: "white",
+    borderRadius: 8,
+    padding: 12,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  timelineCardTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  timelineCardText: {
+    fontSize: 14,
+    color: "#333",
+  },
+  timelineTagContainer: {
+    backgroundColor: "#E1F5FE",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginTop: 4,
+  },
+  timelineTagText: {
+    color: "#0288D1",
+    fontSize: 12,
   },
 });

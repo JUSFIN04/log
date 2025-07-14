@@ -6,6 +6,7 @@ import React, { useEffect, useState } from "react";
 import {
   Alert
 } from "react-native";
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 export default function PostDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -125,71 +126,78 @@ export default function PostDetailScreen() {
   };
 
   return (
-    <>
-      <Tabs
-        screenOptions={{
-          tabBarActiveTintColor: "#007AFF",
-          headerShown: false,
-        }}
-      >
-        <Tabs.Screen
-          name="index"
-          options={{
-            title: "Home",
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="home" size={24} color={color} />
-            ),
+    <SafeAreaProvider>
+      <>
+        <Tabs
+          screenOptions={{
+            tabBarActiveTintColor: "#007AFF",
+            headerShown: false, // Keep headers hidden since we're handling them in each screen
+            tabBarStyle: {
+              // Add proper safe area to tab bar if needed
+              height: 60,
+              paddingBottom: 5,
+            }
           }}
-        />
-        <Tabs.Screen
-          name="explore"
-          options={{
-            title: "Explore",
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="compass" size={24} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="my-posts/index"
-          options={{
-            title: "My Posts",
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="document-text" size={24} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="profile"
-          options={{
-            title: "Profile",
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="person" size={24} color={color} />
-            ),
-          }}
-        />
-        
-        {/* Hide dynamic routes from tab bar */}
-        <Tabs.Screen
-          name="my-posts/[id]"
-          options={{
-            href: null, // This hides it from the tab bar
-          }}
-        />
-        <Tabs.Screen
-          name="my-posts/collections/[id]"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="my-posts/collections/detail/[id]"
-          options={{
-            href: null,
-          }}
-        />
-      </Tabs>
-      {/* Add your post detail UI here */}
-    </>
+        >
+          <Tabs.Screen
+            name="index"
+            options={{
+              title: "Home",
+              tabBarIcon: ({ color }) => (
+                <Ionicons name="home" size={24} color={color} />
+              ),
+            }}
+          />
+          <Tabs.Screen
+            name="explore"
+            options={{
+              title: "Explore",
+              tabBarIcon: ({ color }) => (
+                <Ionicons name="compass" size={24} color={color} />
+              ),
+            }}
+          />
+          <Tabs.Screen
+            name="my-posts/index"
+            options={{
+              title: "My Posts",
+              tabBarIcon: ({ color }) => (
+                <Ionicons name="document-text" size={24} color={color} />
+              ),
+            }}
+          />
+          <Tabs.Screen
+            name="profile"
+            options={{
+              title: "Profile",
+              tabBarIcon: ({ color }) => (
+                <Ionicons name="person" size={24} color={color} />
+              ),
+            }}
+          />
+          
+          {/* Hide dynamic routes from tab bar */}
+          <Tabs.Screen
+            name="my-posts/[id]"
+            options={{
+              href: null, // This hides it from the tab bar
+            }}
+          />
+          <Tabs.Screen
+            name="my-posts/collections/[id]"
+            options={{
+              href: null,
+            }}
+          />
+          <Tabs.Screen
+            name="my-posts/collections/detail/[id]"
+            options={{
+              href: null,
+            }}
+          />
+        </Tabs>
+        {/* Add your post detail UI here */}
+      </>
+    </SafeAreaProvider>
   );
 }
