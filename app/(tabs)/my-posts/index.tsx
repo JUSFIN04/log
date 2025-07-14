@@ -9,11 +9,13 @@ import {
   Dimensions,
   FlatList,
   Image,
+  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get("window");
 
@@ -47,6 +49,7 @@ export default function PostsScreen() {
   const { pb } = usePocketBase();
   const { user } = useAuth();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const fetchData = React.useCallback(async () => {
     setIsLoading(true);
@@ -150,7 +153,7 @@ export default function PostsScreen() {
   const renderBannerView = (item: Post) => (
     <TouchableOpacity
       style={styles.bannerContainer}
-      onPress={() => router.push(`/my-posts/${item.id}`)}
+      onPress={() => router.push(`./${item.id}`)}
     >
       <View style={styles.bannerImageContainer}>
         <Image
@@ -289,117 +292,123 @@ export default function PostsScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.tabsContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "posts" && styles.activeTab]}
-          onPress={() => handleTabChange("posts")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "posts" && styles.activeTabText,
-            ]}
-          >
-            Posts
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "collections" && styles.activeTab]}
-          onPress={() => handleTabChange("collections")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "collections" && styles.activeTabText,
-            ]}
-          >
-            Collections
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
-        </View>
-      ) : (
-        <>
-          {activeTab === "posts" && (
-            <View style={styles.viewTypeContainer}>
-              <TouchableOpacity
-                style={styles.viewTypeButton}
-                onPress={cycleViewType}
-              >
-                <Ionicons
-                  name={
-                    viewType === "banner"
-                      ? "reorder-four-outline"
-                      : viewType === "photo"
-                      ? "grid-outline"
-                      : "list-outline"
-                  }
-                  size={24}
-                  color="#007AFF"
-                />
-                <Text style={styles.viewTypeText}>
-                  {viewType === "banner"
-                    ? "Banner View"
-                    : viewType === "photo"
-                    ? "Photo Cards"
-                    : "Post Cards"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {activeTab === "posts" ? (
-            <FlatList
-              data={posts}
-              keyExtractor={(item) => item.id}
-              renderItem={renderPostItem}
-              contentContainerStyle={styles.listContent}
-              numColumns={viewType === 'photo' ? 2 : 1}
-              key={viewType} // Force re-render on view type change
-              ListEmptyComponent={() => (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No posts found</Text>
-                </View>
-              )}
-            />
-          ) : (
-            <FlatList
-              data={collections}
-              keyExtractor={(item) => item.id}
-              renderItem={renderCollectionItem}
-              contentContainerStyle={styles.listContent}
-              ListEmptyComponent={() => (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No collections found</Text>
-                </View>
-              )}
-            />
-          )}
-
+    <SafeAreaView style={styles.safeArea}>
+      <View style={[styles.container, { paddingTop: insets.top > 0 ? 0 : 12 }]}>
+        <View style={styles.tabsContainer}>
           <TouchableOpacity
-            style={styles.fab}
-            onPress={() =>
-              router.push(
-                activeTab === "posts"
-                  ? "./posts/create"
-                  : "./posts/collections/create"
-              )
-            }
+            style={[styles.tab, activeTab === "posts" && styles.activeTab]}
+            onPress={() => handleTabChange("posts")}
           >
-            <Ionicons name="add" size={24} color="white" />
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "posts" && styles.activeTabText,
+              ]}
+            >
+              Posts
+            </Text>
           </TouchableOpacity>
-        </>
-      )}
-    </View>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === "collections" && styles.activeTab]}
+            onPress={() => handleTabChange("collections")}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "collections" && styles.activeTabText,
+              ]}
+            >
+              Collections
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#007AFF" />
+          </View>
+        ) : (
+          <>
+            {activeTab === "posts" && (
+              <View style={styles.viewTypeContainer}>
+                <TouchableOpacity
+                  style={styles.viewTypeButton}
+                  onPress={cycleViewType}
+                >
+                  <Ionicons
+                    name={
+                      viewType === "banner"
+                        ? "reorder-four-outline"
+                        : viewType === "photo"
+                        ? "grid-outline"
+                        : "list-outline"
+                    }
+                    size={24}
+                    color="#007AFF"
+                  />
+                  <Text style={styles.viewTypeText}>
+                    {viewType === "banner"
+                      ? "Banner View"
+                      : viewType === "photo"
+                      ? "Photo Cards"
+                      : "Post Cards"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {activeTab === "posts" ? (
+              <FlatList
+                data={posts}
+                keyExtractor={(item) => item.id}
+                renderItem={renderPostItem}
+                contentContainerStyle={styles.listContent}
+                numColumns={viewType === 'photo' ? 2 : 1}
+                key={viewType} // Force re-render on view type change
+                ListEmptyComponent={() => (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>No posts found</Text>
+                  </View>
+                )}
+              />
+            ) : (
+              <FlatList
+                data={collections}
+                keyExtractor={(item) => item.id}
+                renderItem={renderCollectionItem}
+                contentContainerStyle={styles.listContent}
+                ListEmptyComponent={() => (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>No collections found</Text>
+                  </View>
+                )}
+              />
+            )}
+
+            <TouchableOpacity
+              style={styles.fab}
+              onPress={() =>
+                router.push(
+                  activeTab === "posts"
+                    ? "./posts/create"
+                    : "./posts/collections/create"
+                )
+              }
+            >
+              <Ionicons name="add" size={24} color="white" />
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "white", // Match your tabs background
+  },
   container: {
     flex: 1,
     backgroundColor: "#F9F9FB",

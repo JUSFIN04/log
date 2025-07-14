@@ -16,8 +16,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function PostDetailScreen() {
+  const insets = useSafeAreaInsets();
+
   // Add more robust parameter handling
   const params = useLocalSearchParams();
   const id = params.id || 'create';
@@ -36,6 +39,11 @@ export default function PostDetailScreen() {
   const [postType, setPostType] = useState("");
   const [rating, setRating] = useState("0");
   const [isPublished, setIsPublished] = useState(true);
+
+  // At the top of your component, add state for focus tracking
+  const [titleFocused, setTitleFocused] = useState(false);
+  const [contentFocused, setContentFocused] = useState(false);
+  const [typeFocused, setTypeFocused] = useState(false);
 
   // Only load post data if this is an edit (not a new post)
   // Removed duplicate loadPost declaration to fix redeclaration error.
@@ -97,13 +105,20 @@ export default function PostDetailScreen() {
   useEffect(() => {
     console.log("useEffect triggered - isEditing:", isEditing, "id:", id);
     
-    if (isEditing && pb) {
-      loadPost();
-    } else {
-      // This is a new post, no need to load data
-      setIsLoading(false);
-    }
-  }, [pb, id, isEditing]);
+    // Fix: Don't attempt to load post data immediately on component mount
+    // Use a short delay to ensure all params are properly loaded
+    const timer = setTimeout(() => {
+      // Only try to load posts if we have a valid ID and we're in edit mode
+      if (isEditing && pb && id && id !== "create" && id !== "[id]") {
+        loadPost();
+      } else {
+        // This is a new post or readonly mode, no need to load data for editing
+        setIsLoading(false);
+      }
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [pb, id, isEditing, loadPost]);
 
   const handleSave = async () => {
     if (!title.trim()) {
@@ -126,6 +141,7 @@ export default function PostDetailScreen() {
         Post_Type: postType,
         Rating: [rating], // Rating is an array in PocketBase
         Creator: [user.id], // Creator is an array in PocketBase
+        Published: isPublished, // Add the published status
       };
 
       if (isEditing) {
@@ -134,10 +150,9 @@ export default function PostDetailScreen() {
       } else {
         const record = await pb.collection("Post").create(data);
         console.log("Post created successfully with ID:", record.id);
-        // Navigate to the newly created post detail screen
-        router.push(`/my-posts/${record.id}`);
       }
 
+      // Single navigation action after the operation completes
       router.back();
     } catch (error) {
       console.error("Error saving post:", error);
@@ -176,102 +191,145 @@ export default function PostDetailScreen() {
 
   // Add UI here
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={styles.container}
-    >
-      {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
-        </View>
-      ) : (
-        <ScrollView contentContainerStyle={styles.contentContainer}>
-          <TextInput
-            style={styles.titleInput}
-            placeholder="Enter title"
-            value={title}
-            onChangeText={setTitle}
-          />
-          <TextInput
-            style={styles.contentInput}
-            placeholder="Enter content"
-            multiline
-            value={text}
-            onChangeText={setText}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Post Type (e.g., Article, Recipe)"
-            value={postType}
-            onChangeText={setPostType}
-          />
-          
-          <View style={styles.ratingContainer}>
-            <Text style={styles.label}>Rating:</Text>
-            <View style={styles.stars}>
-              {[1, 2, 3, 4, 5].map((star) => (
-                <TouchableOpacity
-                  key={star}
-                  onPress={() => setRating(star.toString())}
-                >
-                  <Ionicons
-                    name={parseInt(rating) >= star ? "star" : "star-outline"}
-                    size={32}
-                    color={parseInt(rating) >= star ? "#FFD700" : "#ccc"}
-                    style={styles.starIcon}
-                  />
-                </TouchableOpacity>
-              ))}
-            </View>
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={[styles.container, { paddingTop: insets.top || 12 }]}
+      >
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#007AFF" />
           </View>
-
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={togglePublishStatus}
-            >
-              <Ionicons
-                name={isPublished ? "eye" : "eye-off"}
-                size={24}
-                color="#007AFF"
-              />
-              <Text style={styles.actionButtonText}>
-                {isPublished ? "Published" : "Draft"}
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={handleSharePost}
-            >
-              <Ionicons name="share-outline" size={24} color="#007AFF" />
-              <Text style={styles.actionButtonText}>Share</Text>
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity
-            style={styles.saveButton}
-            onPress={handleSave}
-            disabled={isSaving}
+        ) : (
+          <ScrollView 
+            contentContainerStyle={styles.contentContainer}
+            // Add bottom padding for keyboard and bottom inset
+            contentInsetAdjustmentBehavior="automatic"
           >
-            {isSaving ? (
-              <ActivityIndicator color="white" size="small" />
-            ) : (
-              <Text style={styles.saveButtonText}>
-                {isEditing ? "Update Post" : "Create Post"}
+            <View style={styles.floatingInputGroup}>
+              <Text 
+                style={[
+                  styles.floatingLabel, 
+                  (titleFocused || title) ? styles.floatingLabelActive : null
+                ]}
+              >
+                Title
               </Text>
-            )}
-          </TouchableOpacity>
-        </ScrollView>
-      )}
-    </KeyboardAvoidingView>
+              <TextInput
+                style={styles.titleInput}
+                placeholder="Enter post title"
+                placeholderTextColor="#A0A0A0"
+                value={title}
+                onChangeText={setTitle}
+                onFocus={() => setTitleFocused(true)}
+                onBlur={() => setTitleFocused(false)}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Content</Text>
+              <TextInput
+                style={styles.contentInput}
+                placeholder="Enter post content"
+                placeholderTextColor="#A0A0A0"
+                multiline
+                value={text}
+                onChangeText={setText}
+              />
+            </View>
+
+            <View style={styles.floatingInputGroup}>
+              <Text 
+                style={[
+                  styles.floatingLabel, 
+                  (typeFocused || postType) ? styles.floatingLabelActive : null
+                ]}
+              >
+                Post Type
+              </Text>
+              <TextInput
+                style={styles.input}
+                placeholder="E.g., Article, Recipe, Review"
+                placeholderTextColor="#A0A0A0"
+                value={postType}
+                onChangeText={setPostType}
+                onFocus={() => setTypeFocused(true)}
+                onBlur={() => setTypeFocused(false)}
+              />
+            </View>
+            
+            <View style={styles.ratingContainer}>
+              <Text style={styles.label}>Rating:</Text>
+              <View style={styles.stars}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <TouchableOpacity
+                    key={star}
+                    onPress={() => setRating(star.toString())}
+                  >
+                    <Ionicons
+                      name={parseInt(rating) >= star ? "star" : "star-outline"}
+                      size={32}
+                      color={parseInt(rating) >= star ? "#FFD700" : "#ccc"}
+                      style={styles.starIcon}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={togglePublishStatus}
+              >
+                <Ionicons
+                  name={isPublished ? "eye" : "eye-off"}
+                  size={24}
+                  color="#007AFF"
+                />
+                <Text style={styles.actionButtonText}>
+                  {isPublished ? "Published" : "Draft"}
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={handleSharePost}
+              >
+                <Ionicons name="share-outline" size={24} color="#007AFF" />
+                <Text style={styles.actionButtonText}>Share</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={handleSave}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <ActivityIndicator color="white" size="small" />
+              ) : (
+                <Text style={styles.saveButtonText}>
+                  {isEditing ? "Update Post" : "Create Post"}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </ScrollView>
+        )}
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: "#F5F5F7", // Slightly gray background to contrast with white inputs
+    paddingTop: 12, // Add some top padding
+  },
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#F5F5F7",
   },
   loadingContainer: {
     flex: 1,
@@ -282,42 +340,45 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   titleInput: {
+    backgroundColor: "white",
     padding: 16,
     borderRadius: 8,
     fontSize: 16,
-    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E1E1E1",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 1,
     elevation: 1,
-    backgroundColor: "#fff",
   },
   contentInput: {
+    backgroundColor: "white",
     padding: 16,
     borderRadius: 8,
     fontSize: 16,
-    marginBottom: 16,
     minHeight: 150,
     textAlignVertical: "top",
+    borderWidth: 1,
+    borderColor: "#E1E1E1",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 1,
     elevation: 1,
-    backgroundColor: "#fff",
   },
   input: {
+    backgroundColor: "white",
     padding: 16,
     borderRadius: 8,
     fontSize: 16,
-    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E1E1E1",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 1,
     elevation: 1,
-    backgroundColor: "#fff",
   },
   label: {
     fontSize: 16,
@@ -366,5 +427,34 @@ const styles = StyleSheet.create({
     marginTop: 4,
     color: '#007AFF',
     fontSize: 14,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: "500",
+    marginBottom: 8,
+    color: "#333",
+  },
+  floatingInputGroup: {
+    position: 'relative',
+    marginBottom: 24,
+  },
+  floatingLabel: {
+    position: 'absolute',
+    left: 10,
+    top: 18,
+    fontSize: 14,
+    color: '#A0A0A0',
+    zIndex: 1,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    paddingHorizontal: 4,
+  },
+  floatingLabelActive: {
+    top: -8,
+    fontSize: 12,
+    color: '#007AFF',
+    fontWeight: '500',
   },
 });
