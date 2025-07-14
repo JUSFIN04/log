@@ -19,7 +19,7 @@ export const PocketBaseProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         initial: (await AsyncStorage.getItem('pb_auth')) || '',
         clear: async () => AsyncStorage.removeItem('pb_auth'),
       });
-      const pbInstance = new PocketBase('http://127.0.0.1:8090', store); // Replace with your actual PocketBase URL
+      const pbInstance = new PocketBase('https://pocketbase-production-38ea2.up.railway.app', store); // Replace with your actual PocketBase URL
       setPb(pbInstance);
     };
 
